@@ -1,0 +1,206 @@
+# vi: set syntax=make:
+#
+# NSS seed config for Arcadyan AW1000 on ImmortalWrt 24.10.5
+#
+# Usage:
+#   cp nss-setup/config-aw1000.seed .config
+#   make defconfig
+#   make -j$(nproc) V=s
+
+#####################################################################
+# Target
+#####################################################################
+CONFIG_TARGET_qualcommax=y
+CONFIG_TARGET_qualcommax_ipq807x=y
+CONFIG_TARGET_qualcommax_ipq807x_DEVICE_arcadyan_aw1000=y
+
+#####################################################################
+# NSS Offloading — core
+#####################################################################
+CONFIG_ATH11K_NSS_SUPPORT=y
+CONFIG_ATH11K_NSS_MESH_SUPPORT=y
+CONFIG_PACKAGE_MAC80211_NSS_SUPPORT=y
+CONFIG_PACKAGE_kmod-qca-nss-drv=y
+CONFIG_PACKAGE_kmod-qca-nss-drv-bridge-mgr=y
+CONFIG_PACKAGE_kmod-qca-nss-ecm=y
+
+#####################################################################
+# NSS Offloading — additional packages
+#####################################################################
+CONFIG_PACKAGE_kmod-qca-mcs=y
+CONFIG_PACKAGE_kmod-qca-nss-drv-wifi-meshmgr=y
+
+#####################################################################
+# NSS firmware feature flags (compile all protocol support into FW)
+#####################################################################
+CONFIG_NSS_DRV_BRIDGE_ENABLE=y
+CONFIG_NSS_DRV_CAPWAP_ENABLE=y
+CONFIG_NSS_DRV_CLMAP_ENABLE=y
+CONFIG_NSS_DRV_DTLS_ENABLE=y
+CONFIG_NSS_DRV_GRE_ENABLE=y
+CONFIG_NSS_DRV_GRE_REDIR_ENABLE=y
+CONFIG_NSS_DRV_GRE_TUNNEL_ENABLE=y
+CONFIG_NSS_DRV_IGS_ENABLE=y
+CONFIG_NSS_DRV_IPSEC_ENABLE=y
+CONFIG_NSS_DRV_IPV4_REASM_ENABLE=y
+CONFIG_NSS_DRV_IPV6_REASM_ENABLE=y
+CONFIG_NSS_DRV_L2TP_ENABLE=y
+CONFIG_NSS_DRV_LAG_ENABLE=y
+CONFIG_NSS_DRV_LSO_RX_ENABLE=y
+CONFIG_NSS_DRV_MAPT_ENABLE=y
+CONFIG_NSS_DRV_MATCH_ENABLE=y
+CONFIG_NSS_DRV_MIRROR_ENABLE=y
+CONFIG_NSS_DRV_PPTP_ENABLE=y
+CONFIG_NSS_DRV_PVXLAN_ENABLE=y
+CONFIG_NSS_DRV_QRFS_ENABLE=y
+CONFIG_NSS_DRV_QVPN_ENABLE=y
+CONFIG_NSS_DRV_SHAPER_ENABLE=y
+CONFIG_NSS_DRV_SJACK_ENABLE=y
+CONFIG_NSS_DRV_TLS_ENABLE=y
+CONFIG_NSS_DRV_TRUSTSEC_ENABLE=y
+CONFIG_NSS_DRV_TRUSTSEC_RX_ENABLE=y
+CONFIG_NSS_DRV_TUN6RD_ENABLE=y
+CONFIG_NSS_DRV_TUNIPIP6_ENABLE=y
+CONFIG_NSS_DRV_UDP_ST_ENABLE=y
+CONFIG_NSS_DRV_VLAN_ENABLE=y
+CONFIG_NSS_DRV_VXLAN_ENABLE=y
+
+#####################################################################
+# NSS SQM / QoS
+#####################################################################
+CONFIG_PACKAGE_kmod-qca-nss-drv-qdisc=y
+CONFIG_PACKAGE_sqm-scripts=y
+CONFIG_PACKAGE_sqm-scripts-nss=y
+CONFIG_PACKAGE_luci-app-sqm=y
+
+#####################################################################
+# Feeds — disable custom feeds from appearing in opkg repos
+#####################################################################
+CONFIG_FEED_nss_packages=n
+CONFIG_FEED_sqm_scripts_nss=n
+CONFIG_FEED_qmodem=n
+CONFIG_FEED_luci_app_temp_status=n
+CONFIG_FEED_luci_app_cpu_status=n
+CONFIG_FEED_luci_app_internet_detector=n
+
+#####################################################################
+# Compiler Optimization
+#####################################################################
+CONFIG_BUILD_PATENTED=y
+CONFIG_CCACHE=y
+CONFIG_DEVEL=y
+CONFIG_TOOLCHAINOPTS=y
+CONFIG_TARGET_OPTIONS=y
+CONFIG_TARGET_OPTIMIZATION="-O2 -pipe -mcpu=cortex-a53+crc+crypto"
+CONFIG_USE_GC_SECTIONS=y
+CONFIG_ZLIB_OPTIMIZE_SPEED=y
+
+#####################################################################
+# Kernel tuning
+#####################################################################
+CONFIG_KERNEL_PERF_EVENTS=y
+CONFIG_KERNEL_ARM_PMU=y
+CONFIG_KERNEL_ARM_PMUV3=y
+CONFIG_KERNEL_PREEMPT_NONE=y
+CONFIG_KERNEL_PREEMPT_NONE_BUILD=y
+CONFIG_ATH11K_DEBUGFS_HTT_STATS=n
+CONFIG_ATH11K_DEBUGFS_STA=n
+CONFIG_ATH11K_THERMAL=n
+
+#####################################################################
+# SSL — use OpenSSL everywhere
+#####################################################################
+CONFIG_PACKAGE_libustream-openssl=y
+CONFIG_PACKAGE_libustream-mbedtls=n
+CONFIG_PACKAGE_libopenssl=y
+CONFIG_LUA_ECO_OPENSSL=y
+CONFIG_LUA_ECO_MBEDTLS=n
+CONFIG_OPENSSL_OPTIMIZE_SPEED=y
+
+#####################################################################
+# Wireless — WPA3 + mesh
+#####################################################################
+CONFIG_PACKAGE_wpad-mesh-openssl=y
+CONFIG_PACKAGE_wpad-basic-mbedtls=n
+
+#####################################################################
+# LuCI — core
+#####################################################################
+CONFIG_PACKAGE_luci=y
+CONFIG_PACKAGE_luci-ssl-openssl=y
+CONFIG_PACKAGE_luci-theme-argon=y
+
+#####################################################################
+# LuCI — applications
+#####################################################################
+CONFIG_PACKAGE_luci-app-firewall=y
+CONFIG_PACKAGE_luci-app-commands=y
+CONFIG_PACKAGE_luci-app-easymesh=y
+CONFIG_PACKAGE_luci-app-log=y
+CONFIG_PACKAGE_luci-app-package-manager=y
+CONFIG_PACKAGE_luci-app-wireguard=y
+
+# gSpotx2f status widgets (from dedicated feeds)
+CONFIG_PACKAGE_luci-app-temp-status=y
+CONFIG_PACKAGE_luci-app-cpu-status=y
+CONFIG_PACKAGE_luci-app-internet-detector=y
+
+#####################################################################
+# VPN
+#####################################################################
+CONFIG_PACKAGE_kmod-wireguard=y
+CONFIG_PACKAGE_wireguard-tools=y
+CONFIG_PACKAGE_luci-proto-wireguard=y
+CONFIG_PACKAGE_kmod-pptp=y
+CONFIG_PACKAGE_kmod-pppol2tp=y
+CONFIG_PACKAGE_kmod-l2tp=y
+
+#####################################################################
+# Modem / Mobile (Quectel 5G)
+#####################################################################
+# MHI bus (PCIe modems)
+CONFIG_PACKAGE_kmod-mhi-bus=y
+CONFIG_PACKAGE_kmod-mhi-net=y
+CONFIG_PACKAGE_kmod-mhi-pci-generic=y
+
+# RMNET (CPU path; NSS offload not available in current feeds)
+CONFIG_PACKAGE_kmod-rmnet=y
+
+# USB modem protocols
+CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y
+CONFIG_PACKAGE_kmod-usb-net-cdc-ncm=y
+CONFIG_PACKAGE_kmod-usb-net-cdc-mbim=y
+CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=y
+CONFIG_PACKAGE_kmod-usb-serial-qualcomm=y
+CONFIG_PACKAGE_kmod-usb-serial-cp210x=y
+CONFIG_PACKAGE_kmod-usb-acm=y
+CONFIG_PACKAGE_kmod-wwan=y
+
+# Modem utilities
+CONFIG_PACKAGE_comgt=y
+CONFIG_PACKAGE_comgt-ncm=y
+CONFIG_PACKAGE_chat=y
+CONFIG_PACKAGE_sms-tool=y
+CONFIG_PACKAGE_luci-proto-ncm=y
+
+# QModem (from qmodem feed)
+CONFIG_PACKAGE_qmodem=y
+CONFIG_PACKAGE_luci-app-qmodem=y
+CONFIG_PACKAGE_luci-app-qmodem_INCLUDE_generic-qmi-wwan=y
+# CONFIG_PACKAGE_luci-app-qmodem_INCLUDE_vendor-qmi-wwan is not set
+CONFIG_PACKAGE_luci-app-qmodem_INCLUDE_ADD_QFIREHOSE_SUPPORT=y
+CONFIG_PACKAGE_quectel-cm=y
+CONFIG_PACKAGE_qfirehose=y
+CONFIG_PACKAGE_sms-forwarder=y
+
+#####################################################################
+# Useful packages
+#####################################################################
+CONFIG_PACKAGE_iperf3=y
+CONFIG_PACKAGE_htop=y
+CONFIG_PACKAGE_curl=y
+CONFIG_LIBCURL_OPENSSL=y
+CONFIG_LIBCURL_MBEDTLS=n
+CONFIG_PACKAGE_tcpdump=y
+CONFIG_PACKAGE_ethtool=y
+CONFIG_PACKAGE_kmod-ramoops=y
