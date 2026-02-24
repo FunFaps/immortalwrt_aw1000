@@ -18,6 +18,6 @@ DEFAULT_PACKAGES += \
 	wpad-openssl uboot-envtools losetup \
 	kmod-qca-nss-drv kmod-qca-nss-ecm \
 	kmod-qca-nss-drv-bridge-mgr \
-	automount autocore luci-app-cpufreq
+	autocore luci-app-cpufreq
 
 $(eval $(call BuildTarget))
