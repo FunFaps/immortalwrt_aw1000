@@ -1,0 +1,44 @@
+#!/bin/sh
+
+add_sysctl() {
+	grep -q "^$1[[:space:]]*=" /etc/sysctl.conf 2>/dev/null || \
+		echo "$1 = $2" >> /etc/sysctl.conf
+	sysctl -w "$1=$2" 2>/dev/null
+}
+
+add_sysctl net.core.default_qdisc fq
+add_sysctl net.ipv4.tcp_congestion_control bbr
+
+add_sysctl net.core.netdev_max_backlog 2048
+add_sysctl net.core.netdev_budget 300
+
+add_sysctl net.core.rmem_max 16777216
+add_sysctl net.core.wmem_max 16777216
+add_sysctl net.core.rmem_default 65536
+add_sysctl net.core.wmem_default 65536
+add_sysctl net.core.optmem_max 65536
+
+add_sysctl net.ipv4.tcp_rmem "4096 87380 16777216"
+add_sysctl net.ipv4.tcp_wmem "4096 65536 16777216"
+
+add_sysctl net.ipv4.tcp_notsent_lowat 16384
+
+add_sysctl net.ipv4.udp_rmem_min 16384
+add_sysctl net.ipv4.udp_wmem_min 16384
+add_sysctl net.ipv4.udp_mem "65536 131072 262144"
+
+add_sysctl net.ipv4.tcp_mtu_probing 1
+add_sysctl net.ipv4.tcp_slow_start_after_idle 0
+add_sysctl net.ipv4.tcp_no_metrics_save 1
+add_sysctl net.ipv4.tcp_fastopen 3
+
+add_sysctl net.ipv4.tcp_keepalive_time 30
+add_sysctl net.ipv4.tcp_keepalive_intvl 10
+add_sysctl net.ipv4.tcp_keepalive_probes 6
+
+add_sysctl net.netfilter.nf_conntrack_max 131072
+add_sysctl net.netfilter.nf_conntrack_tcp_timeout_established 1200
+add_sysctl net.netfilter.nf_conntrack_tcp_timeout_time_wait 30
+add_sysctl net.netfilter.nf_conntrack_tcp_timeout_fin_wait 30
+
+exit 0

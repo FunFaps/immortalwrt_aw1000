@@ -1,0 +1,4 @@
+config watchdog 'main'
+	option enabled '1'
+	option check_interval '5'
+	option use_ubus '1'

@@ -82,6 +82,8 @@ CONFIG_FEED_qmodem=n
 CONFIG_FEED_luci_app_temp_status=n
 CONFIG_FEED_luci_app_cpu_status=n
 CONFIG_FEED_luci_app_internet_detector=n
+CONFIG_FEED_luci_app_3ginfo_lite=n
+CONFIG_FEED_luci_app_sms_tool=n
 
 #####################################################################
 # Compiler Optimization
@@ -103,9 +105,38 @@ CONFIG_KERNEL_ARM_PMU=y
 CONFIG_KERNEL_ARM_PMUV3=y
 CONFIG_KERNEL_PREEMPT_NONE=y
 CONFIG_KERNEL_PREEMPT_NONE_BUILD=y
+
+# Netfilter — must be built with kernel to avoid ABI mismatch
+CONFIG_PACKAGE_kmod-ip6tables=y
+CONFIG_PACKAGE_kmod-ipt-ipopt=y
+CONFIG_PACKAGE_kmod-ipt-nat=y
+CONFIG_PACKAGE_kmod-ipt-nat6=y
+CONFIG_PACKAGE_kmod-ipt-conntrack=y
+CONFIG_PACKAGE_kmod-ipt-extra=y
+CONFIG_PACKAGE_kmod-nft-tproxy=y
+CONFIG_PACKAGE_kmod-nft-socket=y
+CONFIG_PACKAGE_kmod-nf-nathelper=y
+CONFIG_PACKAGE_kmod-nf-nathelper-extra=y
+CONFIG_PACKAGE_kmod-inet-diag=y
+
+# sing-box / luci-app-homeproxy deps (TUN device + netlink socket diag)
+CONFIG_PACKAGE_kmod-tun=y
+CONFIG_PACKAGE_kmod-netlink-diag=y
+
+# Note on pbr: it needs only kmod-nft-core + kmod-nft-nat, which firewall4
+# already pulls into the base image. Its other deps (pbr, ip-full, jshn,
+# nftables-json, luci-app-pbr, ...) are userspace and install from the repo
+# post-build, so nothing extra is baked in here for pbr.
+
+# TCP BBR congestion control (better throughput on lossy/mobile links)
+# BBR is built into the kernel via config-6.6 (CONFIG_TCP_CONG_BBR=y +
+# CONFIG_DEFAULT_BBR=y + CONFIG_NET_SCH_FQ=y), so kmod-tcp-bbr is NOT used:
+# the package ships tcp_bbr.ko, which does not exist when BBR is builtin (=y).
 CONFIG_ATH11K_DEBUGFS_HTT_STATS=n
 CONFIG_ATH11K_DEBUGFS_STA=n
-CONFIG_ATH11K_THERMAL=n
+# Thermal/hwmon sensors for the WiFi radios — exposes per-radio temperature
+# to LuCI (System page) via /sys/class/hwmon.
+CONFIG_ATH11K_THERMAL=y
 
 #####################################################################
 # SSL — use OpenSSL everywhere
@@ -134,7 +165,6 @@ CONFIG_PACKAGE_luci-theme-argon=y
 # LuCI — applications
 #####################################################################
 CONFIG_PACKAGE_luci-app-firewall=y
-CONFIG_PACKAGE_luci-app-commands=y
 CONFIG_PACKAGE_luci-app-easymesh=y
 CONFIG_PACKAGE_luci-app-log=y
 CONFIG_PACKAGE_luci-app-package-manager=y
@@ -186,12 +216,18 @@ CONFIG_PACKAGE_luci-proto-ncm=y
 # QModem (from qmodem feed)
 CONFIG_PACKAGE_qmodem=y
 CONFIG_PACKAGE_luci-app-qmodem=y
+CONFIG_PACKAGE_luci-app-qmodem-sms=y
+CONFIG_PACKAGE_luci-app-qmodem-ttl=y
 CONFIG_PACKAGE_luci-app-qmodem_INCLUDE_generic-qmi-wwan=y
 # CONFIG_PACKAGE_luci-app-qmodem_INCLUDE_vendor-qmi-wwan is not set
 CONFIG_PACKAGE_luci-app-qmodem_INCLUDE_ADD_QFIREHOSE_SUPPORT=y
 CONFIG_PACKAGE_quectel-cm=y
 CONFIG_PACKAGE_qfirehose=y
 CONFIG_PACKAGE_sms-forwarder=y
+
+# 3G/LTE/5G signal monitoring (from 4IceG feed)
+CONFIG_PACKAGE_luci-app-3ginfo-lite=y
+CONFIG_PACKAGE_luci-app-sms-tool-js=y
 
 #####################################################################
 # Useful packages

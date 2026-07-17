@@ -1,0 +1,23 @@
+From: AW1000 build
+Subject: [PATCH] ath11k: drop DFS and NO-IR flags from regulatory rules
+
+On ath11k the regulatory rules are delivered by the firmware (reg_info) and
+the channel set / TX power is ultimately enforced by the chip firmware per the
+BDF country. We cannot lift those firmware limits from the kernel, but we can
+clear the DFS and NO-IR (passive / no-initiate-radiation) flags so that DFS
+channels become immediately usable without a CAC wait.
+
+Applies after 905-ath11k-remove-intersection (operates on new_regd rules).
+
+--- a/drivers/net/wireless/ath/ath11k/reg.c
++++ b/drivers/net/wireless/ath/ath11k/reg.c
+@@ -605,6 +605,9 @@ ath11k_reg_build_regd(struct ath11k_base
+ 		flags |= ath11k_map_fw_reg_flags(reg_rule->flags);
+ 		flags |= ath11k_map_fw_phy_flags(reg_info->phybitmap);
+
++		/* AW1000: drop DFS / NO-IR so DFS channels come up without CAC */
++		flags &= ~(NL80211_RRF_DFS | NL80211_RRF_NO_IR);
++
+ 		ath11k_reg_update_rule(new_regd->reg_rules + i,
+ 				       reg_rule->start_freq,
+ 				       reg_rule->end_freq, max_bw,

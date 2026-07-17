@@ -1,0 +1,397 @@
+#!/bin/sh
+#
+# AW1000 LED management daemon
+#
+# 5G LED:     red=4G, green=5G-NSA, blue=5G-SA (network type)
+# Signal LED:  blue=excellent, green=good, red=weak (RSRP level)
+# Internet:    green when WAN/modem has IP; blinks on traffic
+# WiFi:        green when radio up; blinks on traffic
+# Phone:       always off
+#
+
+LEDS_BASE="/sys/class/leds"
+AT_LOCK="/tmp/aw1000-modem-at.lock"
+
+led_set() {
+	local led="$1" val="$2"
+	[ -d "$LEDS_BASE/$led" ] && echo "$val" > "$LEDS_BASE/$led/brightness"
+}
+
+led_trigger() {
+	local led="$1" trig="$2"
+	[ -d "$LEDS_BASE/$led" ] && echo "$trig" > "$LEDS_BASE/$led/trigger"
+}
+
+led_timer() {
+	local led="$1" on="$2" off="$3"
+	led_trigger "$led" "timer"
+	[ -d "$LEDS_BASE/$led" ] && {
+		echo "$on" > "$LEDS_BASE/$led/delay_on"
+		echo "$off" > "$LEDS_BASE/$led/delay_off"
+	}
+}
+
+led_netdev() {
+	local led="$1" dev="$2"
+	led_trigger "$led" "netdev"
+	[ -d "$LEDS_BASE/$led" ] && {
+		echo "$dev" > "$LEDS_BASE/$led/device_name"
+		echo 1 > "$LEDS_BASE/$led/link"
+		echo 1 > "$LEDS_BASE/$led/tx"
+		echo 1 > "$LEDS_BASE/$led/rx"
+		echo 50 > "$LEDS_BASE/$led/interval" 2>/dev/null
+	}
+}
+
+all_signal_off() {
+	for c in red green blue; do
+		led_trigger "$c:signal" "none"
+		led_set "$c:signal" 0
+	done
+}
+
+all_5g_off() {
+	for c in red green blue; do
+		led_trigger "$c:5g" "none"
+		led_set "$c:5g" 0
+	done
+}
+
+set_network_led() {
+	local mode="$1"
+	all_5g_off
+	case "$mode" in
+		LTE|WCDMA|TDSCDMA|GSM|CDMA*)
+			led_set "red:5g" 1
+			;;
+		NR5G-NSA|NR5G_NSA|ENDC)
+			led_set "green:5g" 1
+			;;
+		NR5G-SA|NR5G_SA|NR5G)
+			led_set "blue:5g" 1
+			;;
+		SIM_ERROR)
+			led_timer "red:5g" 500 500
+			;;
+		CONNECTING)
+			led_timer "green:5g" 1000 1000
+			;;
+	esac
+}
+
+# RSRP thresholds (dBm):  >= -80 excellent, -80..-100 good, < -100 weak
+set_signal_led() {
+	local rsrp="$1"
+	all_signal_off
+
+	if [ -z "$rsrp" ] || [ "$rsrp" = "0" ]; then
+		return
+	fi
+
+	if [ "$rsrp" -ge -80 ] 2>/dev/null; then
+		led_set "blue:signal" 1
+	elif [ "$rsrp" -ge -100 ] 2>/dev/null; then
+		led_set "green:signal" 1
+	else
+		led_set "red:signal" 1
+	fi
+}
+
+get_rsrp() {
+	local port="$1"
+	local resp rsrp
+
+	resp=$(at_cmd "$port" "AT+QCSQ")
+	[ -z "$resp" ] && return 1
+
+	local line
+	line=$(echo "$resp" | grep "+QCSQ:" | head -1)
+	[ -z "$line" ] && return 1
+
+	if echo "$line" | grep -q '"NR5G-SA"'; then
+		# +QCSQ: "NR5G-SA",rsrp,sinr,rsrq
+		rsrp=$(echo "$line" | awk -F',' '{print $2}')
+	elif echo "$line" | grep -q '"NR5G-NSA"'; then
+		# +QCSQ: "NR5G-NSA",lte_rssi,lte_rsrp,lte_sinr,lte_rsrq,nr_rsrp,nr_sinr,nr_rsrq
+		# prefer NR RSRP (field 6), fallback to LTE RSRP (field 3)
+		rsrp=$(echo "$line" | awk -F',' '{print $6}')
+		[ -z "$rsrp" ] || [ "$rsrp" = "-32768" ] && \
+			rsrp=$(echo "$line" | awk -F',' '{print $3}')
+	elif echo "$line" | grep -q '"LTE"'; then
+		# +QCSQ: "LTE",rssi,rsrp,sinr,rsrq
+		rsrp=$(echo "$line" | awk -F',' '{print $3}')
+	else
+		return 1
+	fi
+
+	rsrp=$(echo "$rsrp" | tr -d ' \r\n')
+	[ -z "$rsrp" ] || [ "$rsrp" = "-32768" ] && return 1
+	echo "$rsrp"
+}
+
+find_at_port() {
+	local port number latest_port="" latest_number=-1
+
+	for port in /dev/ttyUSB*; do
+		[ -c "$port" ] || continue
+		number=${port#/dev/ttyUSB}
+		case "$number" in
+			''|*[!0-9]*) continue ;;
+		esac
+		[ "$number" -gt "$latest_number" ] && {
+			latest_port="$port"
+			latest_number="$number"
+		}
+	done
+
+	printf '%s\n' "$latest_port"
+}
+
+at_cmd() {
+	local port="$1" cmd="$2"
+
+	(
+	flock 9
+
+	if command -v tom_modem >/dev/null 2>&1; then
+		resp=$(tom_modem -d "$port" -o a -c "$cmd" 2>/dev/null)
+		[ -n "$resp" ] && { echo "$resp"; exit 0; }
+	fi
+
+	if command -v sms_tool >/dev/null 2>&1; then
+		resp=$(sms_tool -d "$port" at "$cmd" 2>/dev/null)
+		[ -n "$resp" ] && { echo "$resp"; exit 0; }
+	fi
+
+	tmpf="/tmp/.aw1000_at_$$"
+	rm -f "$tmpf"
+	(
+		exec 3<>"$port"
+		echo -e "${cmd}\r" >&3
+		sleep 1
+		cat <&3 > "$tmpf" &
+		cpid=$!
+		sleep 1
+		kill "$cpid" 2>/dev/null
+		exec 3>&-
+	) 2>/dev/null
+	[ -f "$tmpf" ] && { cat "$tmpf"; rm -f "$tmpf"; exit 0; }
+	exit 1
+	) 9>>"$AT_LOCK"
+}
+
+get_network_mode() {
+	local port="$1"
+	local resp nw_type
+
+	resp=$(at_cmd "$port" "AT+QNWINFO")
+	nw_type=$(echo "$resp" | grep "+QNWINFO:" | head -1 | awk -F'"' '{print $2}')
+
+	if [ -z "$nw_type" ] || [ "$nw_type" = "No Service" ] || [ "$nw_type" = "NONE" ]; then
+		resp=$(at_cmd "$port" 'AT+QENG="servingcell"')
+		if echo "$resp" | grep -q '"NR5G-SA"'; then
+			echo "NR5G-SA"
+		elif echo "$resp" | grep -q '"NR5G-NSA"'; then
+			echo "NR5G-NSA"
+		elif echo "$resp" | grep -q '"LTE"'; then
+			echo "LTE"
+		else
+			echo ""
+		fi
+		return
+	fi
+
+	case "$nw_type" in
+		NR5G-SA*|NR5G\ SA*) echo "NR5G-SA" ;;
+		NR5G-NSA*|NR5G\ NSA*|ENDC*) echo "NR5G-NSA" ;;
+		FDD\ LTE*|TDD\ LTE*|FDD*|TDD*|LTE*)
+			resp=$(at_cmd "$port" 'AT+QENG="servingcell"')
+			if echo "$resp" | grep -q '"NR5G-NSA"'; then
+				echo "NR5G-NSA"
+			else
+				echo "LTE"
+			fi
+			;;
+		WCDMA*|HSDPA*|HSUPA*|HSPA*) echo "WCDMA" ;;
+		*) echo "$nw_type" ;;
+	esac
+}
+
+check_sim_status() {
+	local port="$1"
+	local resp
+	resp=$(at_cmd "$port" "AT+CPIN?")
+	if echo "$resp" | grep -q "READY"; then
+		echo "ready"
+	elif echo "$resp" | grep -q "SIM PIN\|SIM PUK\|NOT INSERTED\|NOT READY"; then
+		echo "error"
+	elif echo "$resp" | grep -q "ERROR"; then
+		echo "error"
+	else
+		echo "unknown"
+	fi
+}
+
+iface_has_ip() {
+	local status="$1"
+	echo "$status" | grep -q '"ipv4-address"' || return 1
+	echo "$status" | grep -A2 '"ipv4-address"' | grep -q '"address"' || return 1
+	return 0
+}
+
+find_wan_device() {
+	local iface status l3dev dev
+
+	for iface in $(ubus list 2>/dev/null | grep '^network\.interface\.' | sed 's/network\.interface\.//'); do
+		case "$iface" in
+			loopback|lan*|br-lan) continue ;;
+		esac
+		status=$(ubus call "network.interface.$iface" status 2>/dev/null)
+		[ -z "$status" ] && continue
+		echo "$status" | grep -q '"up": true' || continue
+		iface_has_ip "$status" || continue
+
+		l3dev=$(echo "$status" | grep '"l3_device"' | head -1 | awk -F'"' '{print $4}')
+		[ -n "$l3dev" ] && [ -d "/sys/class/net/$l3dev" ] && { echo "$l3dev"; return 0; }
+		dev=$(echo "$status" | grep '"device"' | head -1 | awk -F'"' '{print $4}')
+		[ -n "$dev" ] && [ -d "/sys/class/net/$dev" ] && { echo "$dev"; return 0; }
+	done
+
+	return 1
+}
+
+find_wifi_device() {
+	for phy_dir in /sys/class/ieee80211/phy*; do
+		[ -d "$phy_dir" ] || continue
+		for netdir in "$phy_dir"/device/net/*; do
+			[ -d "$netdir" ] || continue
+			local state=$(cat "$netdir/operstate" 2>/dev/null)
+			if [ "$state" = "up" ] || [ "$state" = "unknown" ]; then
+				basename "$netdir"
+				return 0
+			fi
+		done
+	done
+	return 1
+}
+
+update_internet_led() {
+	local wan_dev
+	wan_dev=$(find_wan_device)
+
+	if [ -n "$wan_dev" ]; then
+		if [ "$wan_dev" != "$prev_inet_dev" ]; then
+			led_netdev "green:internet" "$wan_dev"
+			prev_inet_dev="$wan_dev"
+		fi
+	else
+		if [ "$prev_inet_dev" != "__off__" ]; then
+			led_trigger "green:internet" "none"
+			led_set "green:internet" 0
+			prev_inet_dev="__off__"
+		fi
+	fi
+}
+
+update_wifi_led() {
+	local wifi_dev
+	wifi_dev=$(find_wifi_device)
+
+	if [ -n "$wifi_dev" ]; then
+		if [ "$wifi_dev" != "$prev_wifi_dev" ]; then
+			led_netdev "green:wifi" "$wifi_dev"
+			prev_wifi_dev="$wifi_dev"
+		fi
+	else
+		if [ "$prev_wifi_dev" != "__off__" ]; then
+			led_trigger "green:wifi" "none"
+			led_set "green:wifi" 0
+			prev_wifi_dev="__off__"
+		fi
+	fi
+}
+
+# --- main ---
+
+logger -t aw1000-leds "LED daemon started"
+
+led_set "green:phone" 0
+
+prev_mode=""
+prev_rsrp=""
+prev_inet_dev=""
+prev_wifi_dev=""
+prev_at_port=""
+
+while true; do
+	update_wifi_led
+	update_internet_led
+
+	at_port=$(find_at_port)
+	if [ "$at_port" != "$prev_at_port" ]; then
+		if [ -n "$at_port" ]; then
+			logger -t aw1000-leds "AT port -> $at_port"
+		else
+			logger -t aw1000-leds "no ttyUSB modem port found"
+		fi
+		prev_at_port="$at_port"
+	fi
+
+	if [ -z "$at_port" ]; then
+		if [ "$prev_mode" != "NO_MODEM" ]; then
+			all_signal_off
+			all_5g_off
+			prev_mode="NO_MODEM"
+		fi
+		sleep 10
+		continue
+	fi
+
+	sim=$(check_sim_status "$at_port")
+	if [ "$sim" = "error" ]; then
+		if [ "$prev_mode" != "SIM_ERROR" ]; then
+			set_network_led "SIM_ERROR"
+			all_signal_off
+			led_timer "red:signal" 500 500
+			prev_mode="SIM_ERROR"
+		fi
+		sleep 10
+		continue
+	fi
+
+	if [ "$sim" = "unknown" ]; then
+		if [ "$prev_mode" != "CONNECTING" ]; then
+			set_network_led "CONNECTING"
+			all_signal_off
+			led_timer "green:signal" 1000 1000
+			prev_mode="CONNECTING"
+		fi
+		sleep 5
+		continue
+	fi
+
+	mode=$(get_network_mode "$at_port")
+	if [ -z "$mode" ]; then
+		if [ "$prev_mode" != "CONNECTING" ]; then
+			set_network_led "CONNECTING"
+			all_signal_off
+			led_timer "green:signal" 1000 1000
+			prev_mode="CONNECTING"
+		fi
+		sleep 5
+		continue
+	fi
+
+	if [ "$mode" != "$prev_mode" ]; then
+		set_network_led "$mode"
+		prev_mode="$mode"
+	fi
+
+	rsrp=$(get_rsrp "$at_port")
+	if [ -n "$rsrp" ] && [ "$rsrp" != "$prev_rsrp" ]; then
+		set_signal_led "$rsrp"
+		prev_rsrp="$rsrp"
+	fi
+
+	sleep 10
+done

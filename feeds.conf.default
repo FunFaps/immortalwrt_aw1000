@@ -8,3 +8,5 @@ src-git qmodem https://gitee.com/qlljcf666/luci-app-qmodem_feeds.git
 src-git luci_app_temp_status https://github.com/gSpotx2f/luci-app-temp-status.git
 src-git luci_app_cpu_status https://github.com/gSpotx2f/luci-app-cpu-status.git
 src-git luci_app_internet_detector https://github.com/gSpotx2f/luci-app-internet-detector.git
+src-git luci_app_3ginfo_lite https://github.com/4IceG/luci-app-3ginfo-lite.git
+src-git luci_app_sms_tool https://github.com/4IceG/luci-app-sms-tool-js.git

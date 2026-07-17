@@ -1,0 +1,68 @@
+#!/bin/sh
+
+. /lib/functions.sh
+
+config_load modem-registration-watchdog
+config_get enabled main enabled 1
+config_get check_interval main check_interval 5
+config_get use_ubus main use_ubus 1
+
+[ "$enabled" = "1" ] || exit 0
+
+case "$check_interval" in
+	''|*[!0-9]*|0) check_interval=5 ;;
+esac
+
+AT_LOCK="/tmp/aw1000-modem-at.lock"
+
+find_at_port() {
+	local port number latest_port="" latest_number=-1
+
+	for port in /dev/ttyUSB*; do
+		[ -c "$port" ] || continue
+		number=${port#/dev/ttyUSB}
+		case "$number" in
+			''|*[!0-9]*) continue ;;
+		esac
+		[ "$number" -gt "$latest_number" ] && {
+			latest_port="$port"
+			latest_number="$number"
+		}
+	done
+
+	printf '%s\n' "$latest_port"
+}
+
+send_at_command() {
+	(
+	flock 9
+	if [ "$use_ubus" = "1" ] && ubus list at-daemon >/dev/null 2>&1; then
+		tom_modem -u -d "$at_port" -o a -c "$1" 2>/dev/null
+	else
+		tom_modem -d "$at_port" -o a -c "$1" 2>/dev/null
+	fi
+	) 9>>"$AT_LOCK"
+}
+
+logger -t modem-watchdog "watchdog started (interval ${check_interval}s)"
+
+prev_at_port=""
+while true; do
+	at_port=$(find_at_port)
+	if [ "$at_port" != "$prev_at_port" ]; then
+		if [ -n "$at_port" ]; then
+			logger -t modem-watchdog "AT port -> $at_port"
+		else
+			logger -t modem-watchdog "no ttyUSB modem port found"
+		fi
+		prev_at_port="$at_port"
+	fi
+
+	if [ -n "$at_port" ]; then
+		send_at_command "AT+CEREG?" |
+			grep -Eq '\+CEREG:[[:space:]]*[0-9][[:space:]]*,[[:space:]]*3([[:space:],]|$)' &&
+			send_at_command "AT+CFUN=1,1" >/dev/null
+	fi
+
+	sleep "$check_interval"
+done

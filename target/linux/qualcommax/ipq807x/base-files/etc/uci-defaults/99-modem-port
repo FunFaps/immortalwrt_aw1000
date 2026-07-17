@@ -1,0 +1,32 @@
+#!/bin/sh
+# Set default AT port for modem tools on AW1000 (Quectel RG500Q-EA)
+
+MODEM_PORT="/dev/ttyUSB2"
+
+# luci-app-3ginfo-lite
+if [ -f /etc/config/3ginfo ]; then
+	local cur=$(uci -q get 3ginfo.@3ginfo[0].device)
+	[ -z "$cur" ] && uci set 3ginfo.@3ginfo[0].device="$MODEM_PORT" && uci commit 3ginfo
+fi
+
+# luci-app-sms-tool-js
+if [ -f /etc/config/sms_tool_js ]; then
+	local cur=$(uci -q get sms_tool_js.@sms_tool_js[0].readport)
+	if [ -z "$cur" ]; then
+		uci set sms_tool_js.@sms_tool_js[0].readport="$MODEM_PORT"
+		uci set sms_tool_js.@sms_tool_js[0].sendport="$MODEM_PORT"
+		uci set sms_tool_js.@sms_tool_js[0].ussdport="$MODEM_PORT"
+		uci set sms_tool_js.@sms_tool_js[0].atport="$MODEM_PORT"
+		uci commit sms_tool_js
+	fi
+fi
+
+# Modem registration watchdog
+if [ -f /usr/sbin/modem-registration-watchdog ] && [ -f /etc/init.d/modem-registration-watchdog ]; then
+	chmod 755 /usr/sbin/modem-registration-watchdog
+	chmod 755 /etc/init.d/modem-registration-watchdog
+	/etc/init.d/modem-registration-watchdog enable
+	/etc/init.d/modem-registration-watchdog start
+fi
+
+exit 0
